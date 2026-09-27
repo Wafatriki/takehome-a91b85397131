@@ -7,57 +7,18 @@
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import type { ServerResponse } from "node:http";
+import { defaultBookingProcessor } from "./booking-processor.ts";
 import { ackEvent, ChannelRateLimitError, fetchEvents } from "./channel-client.ts";
-import { normalizeChannelPayload, type BookingRecord } from "./domain.ts";
 import { optional } from "./env.ts";
 import { fail, send } from "./http/errors.ts";
-import { submitToPms } from "./pms-client.ts";
 import { get, has, list, upsert } from "./store.ts";
+import { synchronize } from "./synchronization.ts";
 
 const PORT = Number(optional("PORT", "3000"));
 /** El front es el otro módulo, al lado de este. Nadie sirve una página que no existe. */
 const SCREEN = new URL("../../frontend/index.html", import.meta.url);
-const MAX_SYNC_ATTEMPTS = 4;
-const INITIAL_BACKOFF_MS = 100;
-
 const wait = (milliseconds: number): Promise<void> =>
     new Promise((resolve) => setTimeout(resolve, milliseconds));
-
-async function synchronize(record: BookingRecord): Promise<void> {
-    for (let attempt = 1; attempt <= MAX_SYNC_ATTEMPTS; attempt += 1) {
-        record.status = attempt === 1 ? "syncing" : "retrying";
-        record.attempts = attempt;
-        record.updatedAt = new Date().toISOString();
-        upsert(record);
-
-        try {
-            const result = await submitToPms(record);
-            if (result.ok) {
-                record.status = "synced";
-                record.lastError = null;
-                record.pmsReference = result.pmsReference;
-                record.updatedAt = new Date().toISOString();
-                upsert(record);
-                return;
-            }
-
-            record.lastError = `PMS answered ${result.status}`;
-        } catch (error: unknown) {
-            record.lastError = String(error);
-        }
-
-        if (attempt < MAX_SYNC_ATTEMPTS) {
-            record.status = "retrying";
-            record.updatedAt = new Date().toISOString();
-            upsert(record);
-            await wait(INITIAL_BACKOFF_MS * 2 ** (attempt - 1));
-        }
-    }
-
-    record.status = "failed";
-    record.updatedAt = new Date().toISOString();
-    upsert(record);
-}
 
 /**
  * YOUR JOB (1 of 4): consume the sales channels. Called once when the server starts.
@@ -70,24 +31,7 @@ async function synchronize(record: BookingRecord): Promise<void> {
  * end up `synced` or `failed`, and a duplicate can never reach the PMS twice.
  */
 function startChannelConsumer(): void {
-    const queuedBookingIds = new Set<string>();
-
-    const processEvent = (payload: unknown): void => {
-        const booking = normalizeChannelPayload(payload);
-
-        const record: BookingRecord = {
-            ...booking,
-            status: "pending",
-            attempts: 0,
-            lastError: null,
-            pmsReference: null,
-            updatedAt: new Date().toISOString(),
-        };
-        upsert(record);
-        void synchronize(record).catch((error: unknown) => {
-            process.stderr.write(`Could not synchronize booking ${record.id}: ${String(error)}\n`);
-        });
-    };
+    const processEvent = defaultBookingProcessor(has, upsert);
 
     const poll = async (): Promise<void> => {
         for (;;) {
@@ -96,23 +40,10 @@ function startChannelConsumer(): void {
                 for (const event of page.events) {
                     const acknowledgement = await ackEvent(event.eventId);
                     if (acknowledgement.ok) {
-                        const rawPayload = event.payload as Record<string, unknown>;
-                        const bookingId = rawPayload.booking_id;
-                        if (
-                            typeof bookingId !== "string" ||
-                            has(bookingId) ||
-                            queuedBookingIds.has(bookingId)
-                        ) {
-                            continue;
-                        }
-                        queuedBookingIds.add(bookingId);
                         void Promise.resolve()
                             .then(() => processEvent(event.payload))
                             .catch((error: unknown) => {
                                 process.stderr.write(`Could not process channel event: ${String(error)}\n`);
-                            })
-                            .finally(() => {
-                                queuedBookingIds.delete(bookingId);
                             });
                     }
                 }
