@@ -7,5 +7,8 @@
     "start": "node --experimental-strip-types src/server.ts",
     "check": "node ../check/check.mjs",
     "test": "node --experimental-strip-types --test test/**/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3"
   }
 }

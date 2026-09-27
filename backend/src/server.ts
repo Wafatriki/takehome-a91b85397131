@@ -10,7 +10,7 @@ import type { ServerResponse } from "node:http";
 import { ackEvent, ChannelRateLimitError, fetchEvents } from "./channel-client.ts";
 import { normalizeChannelPayload, type BookingRecord } from "./domain.ts";
 import { optional } from "./env.ts";
-import { fail, notImplemented, send } from "./http/errors.ts";
+import { fail, send } from "./http/errors.ts";
 import { submitToPms } from "./pms-client.ts";
 import { get, has, list, upsert } from "./store.ts";
 
@@ -193,14 +193,14 @@ const server = createServer((request, response) => {
         );
     }
 
-    const detail = url.pathname.match(/^\/api\/bookings\/([^/]+)$/);
+    const detail = /^\/api\/bookings\/([^/]+)$/.exec(url.pathname);
     if (detail && method === "GET") {
         return void bookingDetail(response, detail[1]).catch(() =>
             fail(response, 500, "UNEXPECTED", "Something broke inside."),
         );
     }
 
-    const retry = url.pathname.match(/^\/api\/bookings\/([^/]+)\/retry$/);
+    const retry = /^\/api\/bookings\/([^/]+)\/retry$/.exec(url.pathname);
     if (retry && method === "POST") {
         return void forceRetry(response, retry[1]).catch(() =>
             fail(response, 500, "UNEXPECTED", "Something broke inside."),

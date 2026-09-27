@@ -1,7 +1,7 @@
 /**
  * The two calls to the sales channels. They are written, and each one is written for a single
  * attempt: nothing here loops, waits or decides what to do with what it gets. Read them before you
- * build on them: what is missing is not marked with a TODO.
+ * build on them: what is missing is not marked with a placeholder.
  */
 import { optional } from "./env.ts";
 
