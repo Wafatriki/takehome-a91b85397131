@@ -60,9 +60,13 @@ async function ask(path, options = {}) {
  * pulsar una, entrar en su detalle.
  */
 function renderList(bookings) {
-    out.className = "todo";
-    out.innerHTML = `<p><b>PANTALLA_SIN_ESCRIBIR</b> · el listado</p>
-      <p>Tu API te ha devuelto ${bookings.length} reservas y esta función todavía no las pinta.</p>`;
+        out.className = "";
+        if (bookings.length === 0) {
+                out.innerHTML = '<p class="note">Todavía no hay reservas.</p>';
+                return;
+        }
+        out.innerHTML = `<table><thead><tr><th>Reserva</th><th>Huésped</th><th>Entrada</th><th>Estado</th></tr></thead><tbody>${bookings.map((booking) => `
+            <tr onclick="location.href='?booking=${encodeURIComponent(booking.id)}'"><td>${escapeHtml(booking.id)}</td><td>${escapeHtml(booking.guestName)}</td><td>${escapeHtml(booking.checkIn)}</td><td>${escapeHtml(booking.status)}</td></tr>`).join("")}</tbody></table>`;
 }
 
 /**
@@ -72,9 +76,17 @@ function renderList(bookings) {
  * endpoint de reintento y enseña cómo va.
  */
 function renderDetail(booking) {
-    out.className = "todo";
-    out.innerHTML = `<p><b>PANTALLA_SIN_ESCRIBIR</b> · el detalle de ${escapeHtml(booking.id ?? "")}</p>
-      <p><a class="back" href="?">← todas las reservas</a></p>`;
+        out.className = "";
+        const retry = booking.status === "failed" ? `<button id="retry">Forzar sincronización</button>` : "";
+        out.innerHTML = `<p><a class="back" href="?">← todas las reservas</a></p><h2>${escapeHtml(booking.id)}</h2><dl>
+            <dt>Canal</dt><dd>${escapeHtml(booking.channel)}</dd><dt>Huésped</dt><dd>${escapeHtml(booking.guestName)}</dd>
+            <dt>Estancia</dt><dd>${escapeHtml(booking.checkIn)} a ${escapeHtml(booking.checkOut)}</dd><dt>Precio</dt><dd>${escapeHtml(booking.totalPrice)} ${escapeHtml(booking.currency)}</dd>
+            <dt>Estado</dt><dd>${escapeHtml(booking.status)}</dd><dt>Intentos</dt><dd>${escapeHtml(booking.attempts)}</dd>
+            <dt>Último error</dt><dd>${escapeHtml(booking.lastError || "-")}</dd><dt>Referencia PMS</dt><dd>${escapeHtml(booking.pmsReference || "-")}</dd></dl>${retry}`;
+        document.getElementById("retry")?.addEventListener("click", async () => {
+                await ask(`/api/bookings/${encodeURIComponent(booking.id)}/retry`, { method: "POST" });
+                await load();
+        });
 }
 
 /** El enrutado y el manejo del fallo. Escrito, para que empieces por lo que se ve. */

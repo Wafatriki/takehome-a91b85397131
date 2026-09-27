@@ -23,8 +23,21 @@ export interface EventsPage {
 
 const headers = { "content-type": "application/json", authorization: `Bearer ${API_TOKEN}` };
 
+export class ChannelRateLimitError extends Error {
+    readonly retryAfterMs: number;
+
+    constructor(retryAfterMs: number) {
+        super("The channel rate limit was reached");
+        this.retryAfterMs = retryAfterMs;
+    }
+}
+
 export async function fetchEvents(limit = 1): Promise<EventsPage> {
     const response = await fetch(`${API_BASE}/channels/events?limit=${limit}`, { headers });
+    if (response.status === 429) {
+        const retryAfterSeconds = Number(response.headers.get("retry-after") ?? "1");
+        throw new ChannelRateLimitError(Math.max(1000, retryAfterSeconds * 1000));
+    }
     if (!response.ok) throw new Error(`The channel answered ${response.status}`);
     return (await response.json()) as EventsPage;
 }
