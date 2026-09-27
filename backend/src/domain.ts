@@ -41,5 +41,32 @@ export function toIsoDate(unixSeconds: number): string {
  * real payloads the mock sends; nothing here is hidden, it just is not written yet.
  */
 export function normalizeChannelPayload(raw: unknown): NormalizedBooking {
-    throw new Error("Not implemented");
+    if (typeof raw !== "object" || raw === null) throw new Error("Invalid channel payload");
+    const source = raw as Record<string, unknown>;
+    const channel = source.channel;
+    const id = source.booking_id;
+    if (typeof id !== "string" || (channel !== "booking" && channel !== "airbnb")) {
+        throw new Error("Invalid channel payload");
+    }
+    if (channel === "booking") {
+        return {
+            id,
+            channel,
+            guestName: source.guest_name as string,
+            checkIn: source.check_in as string,
+            checkOut: source.check_out as string,
+            totalPrice: source.total_price as number,
+            currency: source.currency as string,
+        };
+    }
+    const guest = source.guest as Record<string, unknown>;
+    return {
+        id,
+        channel,
+        guestName: `${guest.first_name as string} ${guest.last_name as string}`,
+        checkIn: toIsoDate(source.check_in as number),
+        checkOut: toIsoDate(source.check_out as number),
+        totalPrice: source.total_price as number,
+        currency: source.currency as string,
+    };
 }
