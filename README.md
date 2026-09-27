@@ -69,11 +69,11 @@ docker run --rm -p 3001:3000 \
   booking-sync-bridge
 ```
 
-
-
 **5. Contra la API real de Workfactory**: cambia en `.env` `API_BASE` a
 `https://join.workfactory.es/api` y `API_TOKEN` a tu token. Lo probé así: el
-servicio procesó y sincronizó correctamente las reservas que había disponibles, hasta que el lote de datos de prueba se agotó (`/channels/events` empezó a devolver `done: true` sin eventos). 
+servicio procesó y sincronizó correctamente las reservas que había disponibles,
+hasta que el lote de datos de prueba se agotó (`/channels/events` empezó a
+devolver `done: true` sin eventos).
 
 ## Cómo usé la IA
 
@@ -118,7 +118,15 @@ Lo que descarté: en algún punto proponía soluciones más elaboradas de lo que
 ejercicio necesitaba (capas o abstracciones extra que no aportaban nada al
 alcance real), y opté por quedarme con la versión más simple y directa.
 
-## Decisiones
+## Qué me encontré por el camino
+
+Al revisar la primera versión de la deduplicación, vi que comprobaba duplicados
+*dentro* de la tarea en segundo plano, dejando una ventana donde dos eventos
+casi simultáneos del mismo `booking_id` podían colarse los dos. Lo corregí
+moviendo esa comprobación a antes de crear la tarea, y añadiendo un registro de
+"en proceso" aparte del `store` para cubrir ese hueco.
+
+## Decisiones y qué dejé fuera
 
 **Deduplicación en dos capas**: el `store` (persistente mientras el proceso vive)
 para reservas ya guardadas, y un `Set` en memoria para las que están siendo
@@ -130,8 +138,13 @@ no perder reservas, no reintentar indefinidamente, y con la latencia del PMS
 (3-5 segundos) más reintentos habría alargado mucho el tiempo hasta el estado
 final.
 
-**El estado vive en memoria**, no en una base de datos: se pierde si el proceso
-se reinicia. Para el alcance de la prueba no añadí persistencia porque no lo
-pedía el enunciado y una base de datos habría sido complejidad extra sin
-beneficio claro aquí; en un sistema real sería lo primero que añadiría.
+**Dejé fuera, a propósito, la persistencia en disco o base de datos**: el estado
+vive en memoria y se pierde si el proceso se reinicia. El enunciado no lo pedía,
+y hubiera sido complejidad extra sin beneficio claro para el alcance de este
+ejercicio; en un sistema real sería lo primero que añadiría.
 
+## Qué me costó más
+
+Nada supuso una dificultad grande en sí, pero lo que requirió más atención fue
+razonar bien la parte de concurrencia: asegurarme de que el `ack` en menos de
+500ms nunca quedara bloqueado por la normalización o el envío al PMS.
