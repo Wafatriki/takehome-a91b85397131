@@ -12,7 +12,7 @@ import { normalizeChannelPayload, type BookingRecord } from "./domain.ts";
 import { optional } from "./env.ts";
 import { fail, notImplemented, send } from "./http/errors.ts";
 import { submitToPms } from "./pms-client.ts";
-import { has, list, upsert } from "./store.ts";
+import { get, has, list, upsert } from "./store.ts";
 
 const PORT = Number(optional("PORT", "3000"));
 /** El front es el otro módulo, al lado de este. Nadie sirve una página que no existe. */
@@ -134,7 +134,12 @@ async function listBookings(response: ServerResponse): Promise<void> {
 
 /** YOUR JOB (3 of 4): one booking, with its current sync status. */
 async function bookingDetail(response: ServerResponse, id: string): Promise<void> {
-    notImplemented(response, "The booking detail");
+    const record = get(id);
+    if (!record) {
+        fail(response, 404, "NOT_FOUND", "That booking does not exist.");
+        return;
+    }
+    send(response, 200, record);
 }
 
 /**
@@ -142,7 +147,26 @@ async function bookingDetail(response: ServerResponse, id: string): Promise<void
  * `failed`; what happens to any other status is your call.
  */
 async function forceRetry(response: ServerResponse, id: string): Promise<void> {
-    notImplemented(response, "Forcing a retry");
+    const record = get(id);
+    if (!record) {
+        fail(response, 404, "NOT_FOUND", "That booking does not exist.");
+        return;
+    }
+    if (record.status !== "failed") {
+        fail(response, 409, "NOT_FAILED", "Only failed bookings can be retried.");
+        return;
+    }
+
+    record.status = "pending";
+    record.attempts = 0;
+    record.lastError = null;
+    record.pmsReference = null;
+    record.updatedAt = new Date().toISOString();
+    upsert(record);
+    void synchronize(record).catch((error: unknown) => {
+        process.stderr.write(`Could not retry booking ${record.id}: ${String(error)}\n`);
+    });
+    send(response, 202, record);
 }
 
 const server = createServer((request, response) => {
