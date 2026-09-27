@@ -1,0 +1,11 @@
+{
+  "name": "booking-sync-bridge",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node --experimental-strip-types src/server.ts",
+    "check": "node ../check/check.mjs",
+    "test": "node --experimental-strip-types --test test/**/*.test.ts"
+  }
+}
