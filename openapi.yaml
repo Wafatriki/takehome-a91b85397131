@@ -1,0 +1,176 @@
+openapi: 3.0.3
+info:
+  title: Booking Sync Bridge API
+  version: 1.0.0
+  description: API del servicio de sincronizacion de reservas.
+servers:
+  - url: http://localhost:3000
+paths:
+  /health:
+    get:
+      summary: Comprobar disponibilidad
+      responses:
+        '200':
+          description: El servicio esta listo.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+  /:
+    get:
+      summary: Centro de control
+      responses:
+        '200':
+          description: Pagina HTML del centro de control.
+          content:
+            text/html:
+              schema:
+                type: string
+  /api/bookings:
+    get:
+      summary: Listar reservas
+      responses:
+        '200':
+          description: Reservas ordenadas por actualizacion mas reciente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookingRecord'
+  /api/bookings/{id}:
+    get:
+      summary: Obtener una reserva
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Reserva encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/bookings/{id}/retry:
+    post:
+      summary: Reintentar una reserva fallida
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '202':
+          description: Reserva reactivada para sincronizacion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: La reserva no esta en estado failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  parameters:
+    BookingId:
+      name: id
+      in: path
+      required: true
+      description: Identificador booking_id de la reserva.
+      schema:
+        type: string
+      example: booking_123
+  responses:
+    NotFound:
+      description: Reserva no encontrada.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    BookingRecord:
+      type: object
+      required:
+        - id
+        - channel
+        - guestName
+        - checkIn
+        - checkOut
+        - totalPrice
+        - currency
+        - status
+        - attempts
+        - lastError
+        - pmsReference
+        - updatedAt
+      properties:
+        id:
+          type: string
+          example: booking_123
+        channel:
+          type: string
+          enum: [booking, airbnb]
+          example: booking
+        guestName:
+          type: string
+          example: Ada Lovelace
+        checkIn:
+          type: string
+          format: date
+          example: '2026-10-01'
+        checkOut:
+          type: string
+          format: date
+          example: '2026-10-04'
+        totalPrice:
+          type: number
+          format: double
+          example: 300
+        currency:
+          type: string
+          example: EUR
+        status:
+          type: string
+          enum: [pending, syncing, synced, retrying, failed]
+          example: synced
+        attempts:
+          type: integer
+          minimum: 0
+          example: 1
+        lastError:
+          type: string
+          nullable: true
+          example: null
+        pmsReference:
+          type: string
+          nullable: true
+          example: pms_123
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-09-27T12:00:00.000Z'
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              example: NOT_FOUND
+            message:
+              type: string
+              example: That booking does not exist.
